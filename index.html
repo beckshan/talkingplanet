@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talking Planet LMS</title>
+    
+    <script>
+        window.onerror = function(msg, url, line) {
+            console.error("System Error:", msg, line);
+            return false;
+        };
+    </script>
+
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+        
+        body { 
+            font-family: 'Fredoka', sans-serif; 
+            background-color: #15172b; 
+            color: white; 
+            overflow: hidden;
+            margin: 0; padding: 0;
+        }
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #1e213a; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #363955; border-radius: 10px; }
+        
+        .bubble {
+            background-color: #f0f0f0; color: #1a1a1a;
+            border-radius: 20px; padding: 15px 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative;
+        }
+        .bubble-left { border-bottom-left-radius: 4px; }
+        .bubble-right { border-bottom-right-radius: 4px; }
+
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        .pop-in { animation: popIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        
+        /* ❌ 오답 시 흔들리는 애니메이션 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; border-color: #ef4444 !important; color: #ef4444 !important; }
+
+        .stars { background-image: radial-gradient(white 1px, transparent 1px); background-size: 50px 50px; opacity: 0.1; }
+        .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        if (!window.React || !window.ReactDOM) document.body.innerHTML = "<h1 style='color:white;text-align:center;margin-top:50px'>⚠️ 라이브러리 로딩 실패. 새로고침 하세요.</h1>";
+
+        const { useState, useEffect } = React;
+
+        const SHEET_URLS = [
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=0&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=735388788&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=950176116&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=1983351131&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=734737425&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=2014719537&single=true&output=csv",
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCFm5TqP0Ef5zyB8dBlu4jkdZDnG9pWyPAsU8BwiRcym5QzpChkxjyEiOOplKFwBX1Q0xETV_Y7pU5/pub?gid=1243098724&single=true&output=csv"
+        ];
+
+        // Icons
+        const IconEye = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+        const IconBook = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+        const IconVideo = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>;
+        const IconQuiz = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+        const IconGame = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>;
+        const IconFile = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+        const IconSpeaker = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>;
+        const IconHome = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+        const IconLogout = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+        const IconMenu = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
+        const IconClose = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const IconArrowLeft = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="15 18 9 12 15 6"/></svg>;
+        const IconArrowRight = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="9 18 15 12 9 6"/></svg>;
+        const IconRefresh = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>;
+
+        // 🔥 [TTS 엔진]
+        const speak = (text) => { 
+            if (!text) return;
+            window.speechSynthesis.cancel(); 
+            const u = new SpeechSynthesisUtterance(text);
+            const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text);
+            u.lang = isKorean ? 'ko-KR' : 'en-US'; 
+            u.rate = 0.8; 
+            window.speechSynthesis.speak(u); 
+        };
+
+        const processSheetData = (rows) => {
+            const levels = {};
+            const contentMap = {};
+            const rootProgram = { id: 'prog_default', title: 'Talking Planet', type: 'program', children: [] };
+            const makeId = (str) => str ? str.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() : 'unknown';
+
+            const getVal = (r, keys) => {
+                const normalizedRow = {};
+                Object.keys(r).forEach(k => normalizedRow[k.toLowerCase().replace(/\s/g, '')] = r[k]);
+                for (let k of keys) {
+                    const cleanKey = k.toLowerCase().replace(/\s/g, '');
+                    const val = normalizedRow[cleanKey];
+                    if (val !== undefined && val !== "") return val;
+                }
+                return "";
+            };
+
+            rows.forEach((row) => {
+                if (row.Program) rootProgram.title = row.Program;
+                const lvlName = row.Level; const unitName = row.Unit; const dayName = row.Day;
+                if (!lvlName || !unitName || !dayName) return;
+
+                const lvlId = makeId(lvlName);
+                const unitId = makeId(lvlName + '_' + unitName);
+                const dayId = makeId(lvlName + '_' + unitName + '_' + dayName);
+
+                if (!levels[lvlId]) { levels[lvlId] = { id: lvlId, title: lvlName, type: 'level', children: [], units: {} }; }
+                if (!levels[lvlId].units[unitId]) { levels[lvlId].units[unitId] = { id: unitId, title: unitName, type: 'unit', children: [], days: {} }; levels[lvlId].children.push(levels[lvlId].units[unitId]); }
+                if (!levels[lvlId].units[unitId].days[dayId]) { levels[lvlId].units[unitId].days[dayId] = { id: dayId, title: dayName, type: 'day' }; levels[lvlId].units[unitId].children.push(levels[lvlId].units[unitId].days[dayId]); }
+
+                if (!contentMap[dayId]) contentMap[dayId] = { preview: [], ppt: [], video: null, quiz: [], worksheet: null, game: null };
+                
+                const type = row.Type ? row.Type.toLowerCase().trim() : '';
+                const text1 = getVal(row, ['Text1', 'Text', 'Question']);
+                const text2 = getVal(row, ['Text2', 'Answer', 'Ans']);
+                const text2Array = text2 ? text2.split(/\/|\|/).map(s => s.trim()).filter(s => s) : [];
+                
+                let url = row.URL;
+                if (url && url.includes('drive.google.com')) {
+                    const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                    if (idMatch && idMatch[1]) url = `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+                }
+                
+                // 🔥 [중요] 퀴즈 정답은 무조건 'Answer' 컬럼에서만 찾음 (Text2 fallback 삭제)
+                // 이렇게 해야 Text2(보기) 전체가 정답으로 인식되는 문제 해결
+                const ans = getVal(row, ['Answer', 'Ans', '정답']);
+
+                if (type === 'preview' && url) contentMap[dayId].preview.push(url);
+                if (type === 'ppt') contentMap[dayId].ppt.push({ t1: text1, t2: text2Array, img: url });
+                if (type === 'video') contentMap[dayId].video = url;
+                if (type === 'quiz') contentMap[dayId].quiz.push({ q: text1, options: text2Array, a: ans, img: url }); 
+                if (type === 'worksheet') contentMap[dayId].worksheet = url;
+                if (type === 'game') contentMap[dayId].game = url;
+            });
+            rootProgram.children = Object.values(levels);
+            return { categoryData: [rootProgram], contentData: contentMap };
+        };
+
+        const App = () => {
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [errorMsg, setErrorMsg] = useState(null);
+            const [categoryData, setCategoryData] = useState([]);
+            const [contentData, setContentData] = useState({});
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+            // 🔥 [3중 백업 데이터 로딩 시스템]
+            const fetchWithFallback = async (url) => {
+                const proxies = [
+                    "https://corsproxy.io/?", 
+                    "https://api.allorigins.win/raw?url=", 
+                    "https://thingproxy.freeboard.io/fetch/"
+                ];
+                
+                for (let proxy of proxies) {
+                    try {
+                        const res = await fetch(proxy + encodeURIComponent(url));
+                        if (res.ok) return await res.text();
+                    } catch (e) {
+                        console.warn(`Proxy failed: ${proxy}`, e);
+                    }
+                }
+                throw new Error("All proxies failed");
+            };
+
+            useEffect(() => {
+                if (isLoggedIn) {
+                    setLoading(true); setErrorMsg(null);
+                    const timestamp = new Date().getTime();
+                    
+                    const promises = SHEET_URLS.map(url => {
+                        const freshUrl = url.includes('?') ? `${url}&t=${timestamp}` : `${url}?t=${timestamp}`;
+                        return fetchWithFallback(freshUrl);
+                    });
+
+                    Promise.all(promises).then(texts => {
+                        let allRows = [];
+                        texts.forEach(csvText => {
+                            const results = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                            if (results.data) allRows = [...allRows, ...results.data];
+                        });
+                        try {
+                            const { categoryData, contentData } = processSheetData(allRows);
+                            setCategoryData(categoryData); setContentData(contentData); setLoading(false);
+                        } catch (e) { setErrorMsg(e.message); setLoading(false); }
+                    }).catch(err => { 
+                        setErrorMsg("Data Load Failed. Please try refreshing. (" + err.message + ")"); 
+                        setLoading(false); 
+                    });
+                }
+            }, [isLoggedIn]);
+
+            const handleSelect = (item) => {
+                setSelectedItem(item);
+                if (item.type === 'day') setIsSidebarOpen(false);
+            };
+
+            if (!isLoggedIn) return <Login onLogin={setIsLoggedIn} />;
+            if (loading) return <div className="flex h-screen items-center justify-center bg-[#15172b] text-white flex-col gap-4"><span className="text-6xl animate-spin">🚀</span><span>Loading...</span></div>;
+            if (errorMsg) return <div className="flex h-screen items-center justify-center bg-[#15172b] text-red-400 font-bold p-10 text-center"><p className="text-2xl mb-4">🚨 Error</p><p>{errorMsg}</p><button onClick={()=>window.location.reload()} className="mt-6 px-6 py-2 bg-indigo-600 rounded-lg">Retry</button></div>;
+
+            return (
+                <div className="flex h-screen bg-[#15172b] text-slate-200 font-sans relative overflow-hidden">
+                    <div className="absolute inset-0 stars pointer-events-none"></div>
+
+                    {/* Sidebar */}
+                    <div className={`fixed inset-y-0 left-0 border-r border-[#363955] shadow-2xl z-50 bg-[#1e213a]/95 backdrop-blur-md sidebar-transition flex flex-col w-72 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                        <div className="p-6 border-b border-[#363955] flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-[#e86c35] rounded-full flex items-center justify-center border-2 border-white/20 shadow-lg shrink-0"><span className="text-xl">👩‍🚀</span></div>
+                                <div><h1 className="text-lg font-bold text-white tracking-wide">Admin</h1></div>
+                            </div>
+                            <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-white"><IconClose /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto py-4 custom-scroll">
+                            {categoryData.length === 0 && <div className="p-6 text-slate-400 text-center text-sm">No Data Found.</div>}
+                            {categoryData.map(item => <SidebarItem key={item.id} item={item} onSelect={handleSelect} selectedId={selectedItem?.id} />)}
+                        </div>
+                    </div>
+
+                    {/* Main Layout */}
+                    <div className="flex-1 h-screen relative flex flex-col w-full transition-all duration-300">
+                        {selectedItem && selectedItem.type === 'day' ? (
+                            <ContentViewer 
+                                dayId={selectedItem.id} 
+                                title={selectedItem.title} 
+                                data={contentData[selectedItem.id]} 
+                                isSidebarOpen={isSidebarOpen} 
+                                toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
+                            />
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center z-10 animate-fade-in-up">
+                                <button onClick={() => setIsSidebarOpen(true)} className="absolute top-6 left-6 p-3 bg-[#363955] rounded-full hover:bg-[#e86c35] transition-colors text-white shadow-lg"><IconMenu /></button>
+                                <div className="w-48 h-48 bg-[#1e213a] rounded-full flex items-center justify-center mb-8 relative border-4 border-[#363955] shadow-2xl"><span className="text-7xl animate-bounce">🌍</span></div>
+                                <h2 className="text-3xl font-bold text-white">Select Your Mission</h2>
+                                <p className="text-gray-400 mt-2">Open the menu to start class.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const Login = ({ onLogin }) => {
+            const [id, setId] = useState(''); const [pw, setPw] = useState('');
+            const handleLogin = (e) => { e.preventDefault(); if(id && pw) onLogin(true); else alert("Enter any ID/PW"); };
+            return (
+                <div className="flex h-screen w-full items-center justify-center bg-[#15172b] relative overflow-hidden">
+                    <div className="absolute inset-0 stars"></div>
+                    <div className="z-10 bg-[#1e213a] p-12 rounded-[40px] shadow-2xl border-4 border-[#363955] w-96 text-center">
+                        <div className="flex justify-center mb-6"><div className="w-24 h-24 bg-[#e86c35] rounded-full flex items-center justify-center text-5xl shadow-xl border-4 border-[#f4a226]">🧑‍🚀</div></div>
+                        <h1 className="text-2xl font-bold text-white mb-2">Talking Planet</h1>
+                        <p className="text-gray-400 mb-8 text-sm font-medium">Please Login to Start</p>
+                        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                            <input type="text" placeholder="ID" className="w-full p-4 rounded-2xl bg-[#15172b] border border-[#363955] text-white focus:outline-none focus:border-[#e86c35]" value={id} onChange={e => setId(e.target.value)} />
+                            <input type="password" placeholder="Password" className="w-full p-4 rounded-2xl bg-[#15172b] border border-[#363955] text-white focus:outline-none focus:border-[#e86c35]" value={pw} onChange={e => setPw(e.target.value)} />
+                            <button type="submit" className="mt-4 bg-[#e86c35] hover:bg-[#d65a25] text-white font-bold py-4 rounded-2xl shadow-lg transform transition-all active:scale-95 text-lg">LOG IN</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const SidebarItem = ({ item, level = 0, onSelect, selectedId }) => {
+            const [isOpen, setIsOpen] = useState(false);
+            const hasChildren = item.children && item.children.length > 0;
+            const isSelected = selectedId === item.id;
+            return (
+                <div className="select-none px-2">
+                    <div onClick={() => hasChildren ? setIsOpen(!isOpen) : onSelect(item)} className={`flex items-center justify-between py-3 px-4 my-1 rounded-xl cursor-pointer transition-all border-2 ${isSelected ? 'bg-[#e86c35] border-[#f4a226] text-white shadow-lg' : 'bg-transparent border-transparent text-gray-300 hover:bg-[#363955]'}`} style={{ marginLeft: `${level * 8}px` }}>
+                        <span className={`font-bold ${level === 0 ? 'text-base' : 'text-sm'}`}>{item.title}</span>
+                        {hasChildren && <span className="text-xs opacity-70">{isOpen ? '▼' : '▶'}</span>}
+                    </div>
+                    {hasChildren && isOpen && (<div>{item.children.map(child => <SidebarItem key={child.id} item={child} level={level + 1} onSelect={onSelect} selectedId={selectedId} />)}</div>)}
+                </div>
+            );
+        };
+
+        const ContentViewer = ({ dayId, title, data, isSidebarOpen, toggleSidebar }) => {
+            const [activeTab, setActiveTab] = useState('preview');
+            const [pptPage, setPptPage] = useState(0);
+            const [quizPage, setQuizPage] = useState(0);
+            const [quizStep, setQuizStep] = useState(0);
+            const [previewIndex, setPreviewIndex] = useState(0);
+            const [wrongAnswers, setWrongAnswers] = useState([]); // 🔥 오답 추적용
+
+            useEffect(() => { 
+                setActiveTab('preview'); 
+                setPptPage(0); 
+                setQuizPage(0);
+                setQuizStep(0);
+                setPreviewIndex(0); 
+                setWrongAnswers([]);
+            }, [dayId]);
+
+            const nextQuizStep = () => {
+                const qData = data.quiz[quizPage];
+                if (!qData) return;
+                
+                // 진행: 문제(0) -> [힌트(1)] -> [보기(2)] -> 정답(3)
+                if (quizStep === 0) {
+                    if (qData.img) setQuizStep(1);
+                    else if (qData.options.length > 0) setQuizStep(2);
+                    else setQuizStep(3);
+                } else if (quizStep === 1) {
+                    if (qData.options.length > 0) setQuizStep(2);
+                    else setQuizStep(3);
+                } else if (quizStep === 2) {
+                    // 보기가 있으면 클릭으로만 정답 넘어가게 막음 (배경 클릭 무시)
+                }
+            };
+
+            const checkAnswer = (option) => {
+                const qData = data.quiz[quizPage];
+                const cleanOpt = option.trim();
+                const cleanAns = qData.a ? qData.a.trim() : "";
+
+                if (cleanOpt === cleanAns) {
+                    // 정답!
+                    setQuizStep(3);
+                } else {
+                    // 오답!
+                    setWrongAnswers(prev => [...prev, option]);
+                }
+            };
+
+            const changeQuizPage = (newPage) => {
+                setQuizPage(newPage);
+                setQuizStep(0);
+                setWrongAnswers([]);
+            };
+
+            if (!data) return <div className="flex items-center justify-center h-full text-slate-500">No content uploaded.</div>;
+
+            const tabs = [
+                { id: 'preview', label: 'Preview', icon: IconEye },
+                { id: 'ppt', label: 'Lesson', icon: IconBook }, 
+                { id: 'video', label: 'Video', icon: IconVideo },
+                { id: 'quiz', label: 'Quiz', icon: IconQuiz },
+                { id: 'game', label: 'Game', icon: IconGame },
+                { id: 'worksheet', label: 'Sheet', icon: IconFile },
+            ];
+
+            return (
+                <div className="flex-1 h-screen overflow-hidden flex flex-col relative z-10 bg-[#15172b]">
+                    <div className="h-16 flex items-center justify-between px-4 border-b border-[#363955] bg-[#1e213a] shrink-0 shadow-md z-20">
+                        <div className="flex items-center gap-4">
+                            <button onClick={toggleSidebar} className="p-2 bg-[#363955] rounded-full hover:bg-[#e86c35] transition-colors text-white shadow">
+                                {isSidebarOpen ? <IconClose /> : <IconMenu />}
+                            </button>
+                            <button onClick={() => speak("Sound check complete. 소리 테스트 완료.")} className="p-2 bg-green-600 rounded-full hover:bg-green-500 text-white text-xs font-bold shadow animate-pulse">
+                                🔊 Test
+                            </button>
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2 truncate max-w-[200px] md:max-w-md"><span className="text-yellow-400">★</span> {title}</h2>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto custom-scroll no-scrollbar">
+                            {tabs.map(tab => (
+                                <button key={tab.id} onClick={() => setActiveTab(tab.id)} 
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap border-b-2 ${activeTab === tab.id ? 'bg-[#e86c35] border-[#c05628] text-white' : 'bg-[#363955] border-[#25283d] text-gray-400 hover:text-white hover:bg-[#45496a]'}`}>
+                                    <tab.icon /> <span className="hidden md:inline">{tab.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-hidden relative p-2 md:p-4">
+                        <div className="w-full h-full bg-[#1e213a]/50 rounded-xl overflow-hidden relative border border-[#363955] flex flex-col shadow-2xl">
+                            
+                            {activeTab === 'preview' && (
+                                <div className="flex-1 relative flex items-center justify-center bg-black/40 w-full h-full overflow-hidden">
+                                    {data.preview && data.preview.length > 0 ? (
+                                        <div className="w-full h-full relative flex items-center justify-center p-2">
+                                            <img key={previewIndex} src={data.preview[previewIndex]} alt="Preview" className="max-w-full max-h-full object-contain drop-shadow-2xl fade-in" />
+                                            {data.preview.length > 1 && (
+                                                <>
+                                                    <button onClick={() => setPreviewIndex(p => p > 0 ? p - 1 : data.preview.length - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-[#e86c35] text-white rounded-full"><IconArrowLeft /></button>
+                                                    <button onClick={() => setPreviewIndex(p => p < data.preview.length - 1 ? p + 1 : 0)} className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-[#e86c35] text-white rounded-full"><IconArrowRight /></button>
+                                                    <div className="absolute bottom-4 bg-black/60 px-3 py-1 rounded-full text-xs font-bold border border-white/10 text-white backdrop-blur-sm">{previewIndex + 1} / {data.preview.length}</div>
+                                                </>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-slate-500"><p className="text-4xl mb-2">🖼️</p><p>No Image</p></div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'quiz' && (
+                                <div className="flex-1 flex flex-col w-full h-full relative bg-[#15172b]">
+                                    {data.quiz.length > 0 ? (
+                                        <div className="flex-1 flex flex-col w-full h-full">
+                                            
+                                            <div className="flex-1 flex flex-col items-center justify-center relative p-4 cursor-pointer overflow-y-auto" onClick={nextQuizStep}>
+                                                <div className="w-full max-w-5xl flex flex-col items-center">
+                                                    
+                                                    <div className="text-center mb-8 pop-in">
+                                                        <span className="inline-block px-4 py-1 bg-[#e86c35] rounded-full text-xs font-bold mb-4 shadow-lg">Q. {quizPage + 1}</span>
+                                                        <h2 className="text-4xl md:text-5xl font-extrabold text-white leading-tight drop-shadow-xl">{data.quiz[quizPage].q}</h2>
+                                                        <button onClick={(e) => {e.stopPropagation(); speak(data.quiz[quizPage].q)}} className="mt-4 p-2 bg-[#363955] rounded-full hover:bg-[#e86c35] transition-colors"><IconSpeaker/></button>
+                                                    </div>
+
+                                                    {quizStep >= 1 && data.quiz[quizPage].img && (
+                                                        <div className="w-full max-h-[30vh] mb-8 pop-in flex justify-center">
+                                                            <img src={data.quiz[quizPage].img} alt="Hint" className="h-full object-contain rounded-2xl shadow-2xl border-4 border-[#363955]" />
+                                                        </div>
+                                                    )}
+
+                                                    {/* 보기 (버튼) - 오답 흔들림 적용 */}
+                                                    {quizStep >= 2 && data.quiz[quizPage].options.length > 0 && (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-3xl pop-in mb-8" onClick={(e) => e.stopPropagation()}>
+                                                            {data.quiz[quizPage].options.map((opt, idx) => {
+                                                                const isWrong = wrongAnswers.includes(opt);
+                                                                return (
+                                                                    <button 
+                                                                        key={idx} 
+                                                                        onClick={() => checkAnswer(opt)}
+                                                                        className={`p-6 rounded-xl border-2 text-xl font-bold text-center transition-all transform hover:scale-105
+                                                                            ${isWrong ? 'bg-red-500/20 border-red-500 text-red-400 shake' : 'bg-[#2b2e4a] border-[#363955] text-gray-300 hover:bg-[#3d4164]'}
+                                                                        `}
+                                                                    >
+                                                                        {opt}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* 정답 화면 (다음 문제 버튼 가리지 않음) */}
+                                                {quizStep >= 3 && (
+                                                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={(e) => { e.stopPropagation(); setQuizStep(2); }}>
+                                                        <div className="bg-[#1e213a] px-12 py-10 rounded-[30px] border-4 border-[#e86c35] text-center shadow-2xl pop-in relative" onClick={(e) => e.stopPropagation()}>
+                                                            <button onClick={() => setQuizStep(2)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><IconClose /></button>
+                                                            <p className="text-sm text-yellow-400 font-bold mb-4 tracking-widest uppercase">Correct Answer</p>
+                                                            <h3 className="text-6xl font-extrabold text-white mb-8">{data.quiz[quizPage].a || "정답 미기입"}</h3>
+                                                            <button onClick={() => { setQuizStep(0); setWrongAnswers([]); }} className="px-6 py-2 bg-[#363955] rounded-full hover:bg-[#e86c35] text-white font-bold flex items-center gap-2 mx-auto"><IconRefresh /> Replay</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="h-20 bg-[#1e213a] flex items-center justify-between px-8 border-t border-[#363955] shrink-0 z-30 relative">
+                                                <button disabled={quizPage === 0} onClick={() => changeQuizPage(quizPage - 1)} className="px-6 py-3 bg-[#363955] rounded-xl hover:bg-[#45496a] disabled:opacity-30 font-bold flex items-center gap-2"><IconArrowLeft/> Prev</button>
+                                                <div className="text-gray-400 font-bold text-lg">{quizPage + 1} / {data.quiz.length}</div>
+                                                <button disabled={quizPage === data.quiz.length - 1} onClick={() => changeQuizPage(quizPage + 1)} className="px-6 py-3 bg-[#e86c35] rounded-xl hover:bg-[#d65a25] disabled:opacity-30 font-bold flex items-center gap-2">Next <IconArrowRight/></button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-slate-500"><p className="text-4xl mb-2">🤔</p><p>No Quiz Data</p></div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab !== 'preview' && activeTab !== 'quiz' && (
+                                activeTab === 'ppt' ? (
+                                    <div className="w-full h-full relative flex flex-col bg-[#15172b]">
+                                        
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                            {data.ppt.length > 0 ? (
+                                                data.ppt[pptPage].img ? 
+                                                <img src={data.ppt[pptPage].img} alt="slide" className="w-full h-full object-contain" /> 
+                                                : <div className="text-slate-500">No Image</div>
+                                            ) : <div className="text-slate-500">No Slides</div>}
+                                        </div>
+
+                                        {data.ppt.length > 0 && (
+                                            <>
+                                                {data.ppt[pptPage].t1 && (
+                                                    <div className="absolute left-8 top-1/2 -translate-y-1/2 flex flex-col gap-4 max-w-[300px] z-10 pop-in">
+                                                        <div className="flex items-start gap-3">
+                                                            <button onClick={() => speak(data.ppt[pptPage].t1)} className="mt-1 shrink-0 w-12 h-12 bg-[#e86c35] text-white rounded-full flex items-center justify-center hover:bg-[#d65a25] shadow-lg transform active:scale-95 transition-all"><IconSpeaker /></button>
+                                                            <div className="bubble bubble-left text-lg font-bold leading-relaxed whitespace-pre-wrap">
+                                                                {data.ppt[pptPage].t1}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {data.ppt[pptPage].t2 && data.ppt[pptPage].t2.length > 0 && (
+                                                    <div className="absolute right-8 top-1/2 -translate-y-1/2 flex flex-col gap-4 items-end max-w-[300px] z-10">
+                                                        {data.ppt[pptPage].t2.map((ans, idx) => (
+                                                            <div key={idx} className="flex flex-row-reverse items-start gap-3 pop-in" style={{animationDelay: `${idx * 0.1}s`}}>
+                                                                <button onClick={() => speak(ans)} className="mt-1 shrink-0 w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center hover:bg-yellow-400 shadow-lg transform active:scale-95 transition-all"><IconSpeaker /></button>
+                                                                <div className="bubble bubble-right text-lg font-bold leading-relaxed whitespace-pre-wrap cursor-pointer hover:bg-gray-100" onClick={() => speak(ans)}>
+                                                                    {ans}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-black/60 px-8 py-3 rounded-full backdrop-blur-md border border-white/10 z-20 shadow-2xl">
+                                                    <button disabled={pptPage === 0} onClick={() => setPptPage(p => p - 1)} className="text-white hover:text-[#e86c35] disabled:opacity-30 transition-colors"><IconArrowLeft/></button>
+                                                    <span className="text-white font-bold text-lg tracking-wider">{pptPage + 1} / {data.ppt.length}</span>
+                                                    <button disabled={pptPage === data.ppt.length - 1} onClick={() => setPptPage(p => p + 1)} className="text-white hover:text-[#e86c35] disabled:opacity-30 transition-colors"><IconArrowRight/></button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 overflow-y-auto custom-scroll p-4 md:p-8">
+                                        {activeTab === 'video' && (data.video ? (<div className="flex flex-col items-center max-w-5xl mx-auto"><div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border-2 border-[#363955] shadow-xl"><iframe className="w-full h-full" src={data.video} title="Video" frameBorder="0" allowFullScreen></iframe></div></div>) : <div className="text-center text-slate-500 mt-10">No Video</div>)}
+                                        {activeTab === 'game' && (<div className="flex flex-col items-center justify-center h-full text-center"><div className="w-20 h-20 bg-[#363955] rounded-full flex items-center justify-center mb-4 text-white"><IconGame /></div><h3 className="text-xl text-white font-bold mb-2">Game Zone</h3>{data.game ? <a href={data.game} target="_blank" className="text-[#e86c35] font-bold underline text-lg">Play Game 🎮</a> : <p className="text-gray-400">No Link</p>}</div>)}
+                                        {activeTab === 'worksheet' && (<div className="flex justify-center pb-10"><div className="bg-white p-1 rounded shadow-xl max-w-3xl w-full">{data.worksheet ? <img src={data.worksheet} alt="worksheet" className="w-full border border-slate-200" /> : <div className="p-10 text-center text-black">No Image</div>}</div></div>)}
+                                    </div>
+                                )
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
